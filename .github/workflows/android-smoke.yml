@@ -1,7 +1,9 @@
 name: Android launch smoke test
 on:
-  pull_request:
-    branches: [main]
+  push:
+    branches:
+      - main
+      - 'codex/telegram-install-upgrade-smoke-*'
     paths:
       - 'app/**'
       - '.github/workflows/android-smoke.yml'
