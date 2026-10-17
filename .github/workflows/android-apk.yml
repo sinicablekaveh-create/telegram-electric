@@ -2,6 +2,7 @@ name: Build Android debug APK
 on:
   push:
     branches: [main]
+  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,7 +29,9 @@ jobs:
             test -f "$ANDROID_HOME/platforms/android-35/android.jar"
           fi
       - name: Check Python syntax
-        run: python -m py_compile app/src/main/python/telegram_bridge.py
+        run: python -m py_compile app/src/main/python/telegram_bridge.py app/src/main/python/proxy_config.py
+      - name: Offline proxy tests
+        run: python -m unittest discover -s tests -v
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'

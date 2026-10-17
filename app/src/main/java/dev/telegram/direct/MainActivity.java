@@ -20,7 +20,7 @@ import java.util.concurrent.Executors;
 public class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private EditText id, hash, phone, code, password, query, message;
-    private TextView status, selected;
+    private TextView status, selected, proxyInfo;
     private LinearLayout results;
     private String targetId = "", targetName = "";
     private boolean busy = false;
@@ -36,11 +36,15 @@ public class MainActivity extends Activity {
         setContentView(scroller);
         heading(root, "TELEGRAM DIRECT");
         label(root, "Private client | manual single-recipient sends");
+        heading(root, "CONNECTION & PROXY");
+        proxyInfo = label(root, ProxySettings.summary(this));
+        button(root, "PROXY SETTINGS (SOCKS5 / MTProto)",
+            () -> ProxySettings.show(this, config -> task("proxy", config)));
         id = field(root, "API ID", InputType.TYPE_CLASS_NUMBER);
         hash = field(root, "API Hash", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         phone = field(root, "Phone (+country code)", InputType.TYPE_CLASS_PHONE);
         button(root, "1. CONNECT / REQUEST CODE", () -> task("connect",
-            getFilesDir().getAbsolutePath(), value(id), value(hash), value(phone)));
+            getFilesDir().getAbsolutePath(), value(id), value(hash), value(phone), ProxySettings.load(this)));
         code = field(root, "Telegram verification code", InputType.TYPE_CLASS_NUMBER);
         button(root, "VERIFY CODE", () -> task("code", value(code)));
         password = field(root, "Two-step verification password",
@@ -136,6 +140,15 @@ public class MainActivity extends Activity {
                 busy = false;
                 String type = result.optString("status");
                 status.setText(result.optString("message","Operation complete"));
+                if ("proxy".equals(command) &&
+                    ("proxy_saved".equals(type) || "proxy_applied".equals(type))) {
+                    try {
+                        ProxySettings.save(this, args[0]);
+                        proxyInfo.setText(ProxySettings.summary(this));
+                    } catch (Exception ignored) {
+                        status.setText("Proxy applied, but could not save securely.");
+                    }
+                }
                 JSONArray items = result.optJSONArray("items");
                 if(items != null) render(items);
                 if("authorized".equals(type)) { code.setText(""); password.setText(""); }
