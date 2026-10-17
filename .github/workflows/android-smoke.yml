@@ -35,9 +35,9 @@ jobs:
           disable-animations: true
           script: |
             adb install app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n dev.telegram.direct/.MainActivity
+            adb shell am start -W -n dev.telegram.direct.proxy/dev.telegram.direct.MainActivity
             sleep 10
-            adb shell pidof dev.telegram.direct
+            adb shell pidof dev.telegram.direct.proxy
             adb shell uiautomator dump /sdcard/telegram-ui.xml
             adb shell cat /sdcard/telegram-ui.xml | grep 'TELEGRAM DIRECT'
-            adb logcat -d -t 600 | grep -E 'Process: dev.telegram.direct|FATAL EXCEPTION.*dev.telegram.direct' && exit 1 || true
+            adb logcat -d -t 600 | grep -E 'Process: dev.telegram.direct.proxy|FATAL EXCEPTION.*dev.telegram.direct.proxy' && exit 1 || true
