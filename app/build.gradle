@@ -2,6 +2,15 @@ plugins {
     id 'com.android.application'
     id 'com.chaquo.python'
 }
+def requestedVersionCode = (project.findProperty('appVersionCode') ?: '3').toString()
+def requestedVersionName = (project.findProperty('appVersionName') ?: '0.3.0-review').toString()
+if (!(requestedVersionCode ==~ /[1-9][0-9]*/)) {
+    throw new GradleException('appVersionCode must be a positive integer')
+}
+def parsedVersionCode = requestedVersionCode.toLong()
+if (parsedVersionCode > 2100000000L) {
+    throw new GradleException('appVersionCode exceeds Android\'s supported range')
+}
 android {
     namespace 'dev.telegram.direct'
     compileSdk 35
@@ -9,8 +18,8 @@ android {
         applicationId 'dev.telegram.direct.review'
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName '0.3.0-review'
+        versionCode parsedVersionCode.intValue()
+        versionName requestedVersionName
         ndk {
             abiFilters project.findProperty('smokeTest') == 'true' ? 'x86_64' : 'arm64-v8a'
         }
