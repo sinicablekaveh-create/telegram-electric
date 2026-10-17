@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
           gradle --no-daemon :app:assembleDebug -PsmokeTest=true \
             -PappVersionCode=2 -PappVersionName=0.2.0-proxy
-          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/telegram-direct-v2.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/telegram-direct-v2.apk"
       - name: Build upgrade test version
         run: |
           set -euo pipefail
@@ -46,16 +46,16 @@ jobs:
       - name: Boot emulator, install and launch APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 30
           arch: x86_64
           target: google_apis
-          emulator-boot-timeout: 600
+          emulator-boot-timeout: 1200
           disable-animations: true
           script: |
             set -eu
             app_package=dev.telegram.direct.proxy
             main_activity=dev.telegram.direct.MainActivity
-            baseline_apk="$RUNNER_TEMP/telegram-direct-v2.apk"
+            baseline_apk="$GITHUB_WORKSPACE/telegram-direct-v2.apk"
             upgrade_apk="$GITHUB_WORKSPACE/app/build/outputs/apk/debug/app-debug.apk"
             test -s "$baseline_apk"
             test -s "$upgrade_apk"
