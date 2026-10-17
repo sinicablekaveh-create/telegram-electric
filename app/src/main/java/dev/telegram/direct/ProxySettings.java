@@ -141,7 +141,44 @@ public final class ProxySettings {
         }
     }
 
-    public static void show(Activity activity, Consumer<String> onApply) {
+    private static String collectConfig(Spinner type, EditText server, EditText port,
+                                        EditText username, EditText password,
+                                        EditText secret) throws Exception {
+        JSONObject config = new JSONObject();
+        int option = type.getSelectedItemPosition();
+        config.put("type", option == 1 ? "socks5" : option == 2 ? "mtproto" : "direct");
+        if (option != 0) {
+            String address = server.getText().toString().trim();
+            String number = port.getText().toString().trim();
+            if (address.isEmpty() || number.isEmpty() || address.length() > 253 ||
+                    address.matches(".*[\\\\s/@#?].*"))
+                throw new IllegalArgumentException("Check proxy server and port.");
+            int parsedPort = Integer.parseInt(number);
+            if (parsedPort < 1 || parsedPort > 65535)
+                throw new IllegalArgumentException("Port must be between 1 and 65535.");
+            config.put("server", address);
+            config.put("port", parsedPort);
+            if (option == 1) {
+                config.put("username", username.getText().toString());
+                config.put("password", password.getText().toString());
+            } else {
+                String value = secret.getText().toString().trim();
+                if (!value.matches("(?i)([0-9a-f]{32}|dd[0-9a-f]{32}|ee[0-9a-f]{32}([0-9a-f]{2})*)"))
+                    throw new IllegalArgumentException("Enter a valid MTProto secret (hex).");
+                config.put("secret", value);
+            }
+        }
+        return config.toString();
+    }
+
+    private static void showInputError(Activity activity, Exception exc) {
+        String text = exc instanceof NumberFormatException ?
+                "Enter a valid numeric port." : exc.getMessage();
+        Toast.makeText(activity, text == null ? "Invalid proxy settings." : text,
+                Toast.LENGTH_LONG).show();
+    }
+
+    public static void show(Activity activity, Consumer<String> onApply, Consumer<String> onTest) {
         JSONObject stored;
         try {
             stored = new JSONObject(load(activity));
@@ -205,43 +242,27 @@ public final class ProxySettings {
                 .setTitle("PROXY SETTINGS")
                 .setView(scroll)
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("APPLY & CONNECT", null)
+                .setNeutralButton("TEST CONNECTION", null)
+                .setPositiveButton("APPLY", null)
                 .create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-                .setOnClickListener(v -> {
-                    try {
-                        JSONObject config = new JSONObject();
-                        int option = type.getSelectedItemPosition();
-                        config.put("type", option == 1 ? "socks5" : option == 2 ? "mtproto" : "direct");
-                        if (option != 0) {
-                            String address = server.getText().toString().trim();
-                            String number = port.getText().toString().trim();
-                            if (address.isEmpty() || number.isEmpty())
-                                throw new IllegalArgumentException("Enter proxy server and port.");
-                            int parsedPort = Integer.parseInt(number);
-                            if (parsedPort < 1 || parsedPort > 65535)
-                                throw new IllegalArgumentException("Port must be between 1 and 65535.");
-                            config.put("server", address);
-                            config.put("port", parsedPort);
-                            if (option == 1) {
-                                config.put("username", username.getText().toString());
-                                config.put("password", password.getText().toString());
-                            } else {
-                                String value = secret.getText().toString().trim();
-                                if (!value.matches("(?i)([0-9a-f]{32}|dd[0-9a-f]{32}|ee[0-9a-f]{32}([0-9a-f]{2})*)"))
-                                    throw new IllegalArgumentException("Enter a valid MTProto secret (hex).");
-                                config.put("secret", value);
-                            }
-                        }
-                        onApply.accept(config.toString());
-                        dialog.dismiss();
-                    } catch (Exception exc) {
-                        String text = exc instanceof NumberFormatException ? "Enter a valid numeric port." :
-                            exc.getMessage();
-                        Toast.makeText(activity, text == null ? "Invalid proxy settings." : text,
-                            Toast.LENGTH_LONG).show();
-                    }
-                }));
+        dialog.setOnShowListener(ignored -> {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+                try {
+                    onApply.accept(collectConfig(type, server, port, username, password, secret));
+                    dialog.dismiss();
+                } catch (Exception exc) {
+                    showInputError(activity, exc);
+                }
+            });
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener(v -> {
+                try {
+                    onTest.accept(collectConfig(type, server, port, username, password, secret));
+                    dialog.dismiss();
+                } catch (Exception exc) {
+                    showInputError(activity, exc);
+                }
+            });
+        });
         dialog.show();
     }
 }
