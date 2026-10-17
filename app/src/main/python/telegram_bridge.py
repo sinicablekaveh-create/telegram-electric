@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from telethon import TelegramClient
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
-from telethon.tl.functions.contacts import SearchRequest
+from telethon.tl.functions.contacts import SearchRequest, GetContactsRequest
 
 _client = None
 _loop = None
@@ -80,8 +80,8 @@ async def dialogs():
 async def contacts():
     await require_auth()
     rows = []
-    users = await _client.get_contacts()
-    for user in users[:100]:
+    contact_result = await _client(GetContactsRequest(hash=0))
+    for user in contact_result.users[:100]:
         name = " ".join(p for p in [user.first_name, user.last_name] if p)
         rows.append({"id": str(user.id), "title": name, "kind": "Contact",
                      "username": user.username or "", "selectable": False})
