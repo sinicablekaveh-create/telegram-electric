@@ -29,14 +29,14 @@ jobs:
             test -f "$ANDROID_HOME/platforms/android-35/android.jar"
           fi
       - name: Check Python syntax
-        run: python -m py_compile app/src/main/python/telegram_bridge.py app/src/main/python/proxy_config.py
+        run: python -m py_compile app/src/main/python/telegram_bridge.py app/src/main/python/proxy_config.py app/src/main/python/review_queue.py
       - name: Offline proxy tests
         run: python -m unittest discover -s tests -v
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build debug APK
-        run: gradle --no-daemon :app:assembleDebug
+      - name: Build and lint debug APK
+        run: gradle --no-daemon :app:lintDebug :app:assembleDebug
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:

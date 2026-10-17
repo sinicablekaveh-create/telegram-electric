@@ -2,6 +2,7 @@
 import asyncio
 import json
 from pathlib import Path
+from review_queue import ReviewQueue
 from telethon import TelegramClient, connection
 from proxy_config import parse_proxy, telethon_options, proxy_label
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
@@ -112,42 +113,147 @@ async def require_auth():
     if _client is None or not await _client.is_user_authorized():
         raise ValueError("Sign in to Telegram first.")
 
-async def dialogs():
-    await require_auth()
-    rows = []
-    async for dialog in _client.iter_dialogs(limit=200):
-        group = bool(dialog.is_group)
-        rows.append({
-            "id": str(dialog.id), "title": dialog.name or "(untitled)",
-            "kind": "Group" if group else ("Channel" if dialog.is_channel else "Chat"),
-            "username": getattr(dialog.entity, "username", None) or "",
-            "selectable": group
-        })
-    return answer("ok", "Joined conversations", rows)
+async def joined_group(group_id):
+    """Resolve only groups the signed-in account has actually joined."""
+    async for dialog in _client.iter_dialogs(limit=500):
+        if dialog.is_group and str(dialog.id) == str(group_id):
+            return dialog
+    return None
 
-async def contacts():
+
+async def dialogs(term=""):
     await require_auth()
+    term = term.strip().casefold()
     rows = []
-    contact_result = await _client(GetContactsRequest(hash=0))
-    for user in contact_result.users[:100]:
-        name = " ".join(p for p in [user.first_name, user.last_name] if p)
-        rows.append({"id": str(user.id), "title": name, "kind": "Contact",
-                     "username": user.username or "", "selectable": False})
-    return answer("ok", "Telegram contacts", rows)
+    async for dialog in _client.iter_dialogs(limit=500):
+        if not dialog.is_group:
+            continue
+        name = dialog.name or "(untitled)"
+        username = getattr(dialog.entity, "username", None) or ""
+        if term and term not in name.casefold() and term not in username.casefold():
+            continue
+        rows.append({
+            "id": str(dialog.id), "title": name, "kind": "Joined group",
+            "username": username, "selectable": True
+        })
+    return answer("ok", "Joined groups (up to 500 dialogs checked)", rows)
+
+
+async def contacts(term=""):
+    await require_auth()
+    term = term.strip().casefold()
+    result = await _client(GetContactsRequest(hash=0))
+    rows = []
+    for user in result.users:
+        name = " ".join(part for part in (user.first_name, user.last_name) if part)
+        username = user.username or ""
+        if term and term not in name.casefold() and term not in username.casefold():
+            continue
+        rows.append({
+            "id": str(user.id), "title": name or username or "Unnamed",
+            "kind": "Telegram contact", "username": username,
+            "selectable": False
+        })
+        if len(rows) >= 300:
+            break
+    return answer("ok", "Telegram contacts (up to 300 shown; no phone numbers)", rows)
+
 
 async def public_search(term):
     await require_auth()
-    if len(term.strip()) < 2:
-        return answer("error", "Enter at least two characters.")
-    result = await _client(SearchRequest(q=term.strip(), limit=30))
-    rows = [{"id": str(chat.id), "title": chat.title,
-             "kind": "Public group/channel",
-             "username": getattr(chat, "username", None) or "",
-             "selectable": False} for chat in result.chats]
-    rows.extend({"id": str(user.id), "title": user.first_name or "User",
-                 "kind": "User", "username": user.username or "",
-                 "selectable": False} for user in result.users)
-    return answer("ok", "Public search results", rows)
+    term = term.strip()
+    if len(term) < 2 or len(term) > 100:
+        return answer("error", "Enter 2 to 100 characters.")
+    result = await _client(SearchRequest(q=term, limit=50))
+    rows = []
+    seen = set()
+    for chat in result.chats:
+        username = getattr(chat, "username", None) or ""
+        title = getattr(chat, "title", None) or "(untitled)"
+        kind = "Public group" if (
+            getattr(chat, "megagroup", False)
+            or getattr(chat, "gigagroup", False)
+            or chat.__class__.__name__ == "Chat"
+        ) else "Public channel"
+        key = ("chat", str(chat.id))
+        if key not in seen:
+            rows.append({"id": str(chat.id), "title": title, "kind": kind,
+                         "username": username, "selectable": False})
+            seen.add(key)
+    for user in result.users:
+        key = ("user", str(user.id))
+        if key in seen:
+            continue
+        name = " ".join(part for part in (user.first_name, user.last_name) if part)
+        rows.append({"id": str(user.id), "title": name or user.username or "User",
+                     "kind": "Public user", "username": user.username or "",
+                     "selectable": False})
+        seen.add(key)
+    return answer("ok", "Live Telegram public search (not joined automatically)", rows)
+
+
+async def account_queue():
+    await require_auth()
+    account = await _client.get_me()
+    if account is None or _session_directory is None:
+        raise ValueError("Connect Telegram before opening the review queue.")
+    return ReviewQueue(_session_directory, account.id)
+
+
+async def queue_add(group_id, message):
+    await require_auth()
+    dialog = await joined_group(group_id)
+    if dialog is None:
+        return answer("error", "Select a joined group before queuing.")
+    store = await account_queue()
+    store.add(str(dialog.id), dialog.name or "(untitled)", message)
+    return answer("queued", "Added one group message to the manual review queue.")
+
+
+async def queue_list():
+    store = await account_queue()
+    rows = store.read()
+    return answer("ok", "Review queue: %d entries" % len(rows), rows)
+
+
+async def queue_send(item_id):
+    store = await account_queue()
+    item = store.get(item_id)
+    if item["state"] != "pending":
+        return answer("error", "This entry is not pending. Review its current state.")
+    dialog = await joined_group(item["group_id"])
+    if dialog is None:
+        return answer("error", "The account is no longer in this group; no send was attempted.")
+    # A crash or timeout after this write must NEVER cause an automatic resend.
+    store.transition(item_id, "pending", "uncertain")
+    try:
+        await _client.send_message(dialog.entity, item["text"])
+    except Exception:
+        # Leave the entry uncertain; the user must check Telegram for delivery.
+        return answer("uncertain", "Delivery unknown. Check the group before resolving; do not retry blindly.")
+    store.transition(item_id, "uncertain", "sent")
+    return answer("sent", "Telegram confirmed delivery of the reviewed message.")
+
+
+async def queue_cancel(item_id):
+    store = await account_queue()
+    store.transition(item_id, "pending", "cancelled")
+    return answer("ok", "Pending message cancelled. Nothing was sent.")
+
+
+async def queue_resolve(item_id, action):
+    if action not in ("sent", "cancelled"):
+        return answer("error", "Invalid resolution.")
+    store = await account_queue()
+    store.transition(item_id, "uncertain", action)
+    return answer("ok", "Uncertain entry resolved manually; no message was sent.")
+
+
+async def queue_clear():
+    store = await account_queue()
+    count = store.clear_finished()
+    return answer("ok", "Removed %d completed or cancelled entries." % count)
+
 
 async def saved(message):
     await require_auth()
@@ -179,6 +285,9 @@ def dispatch(operation, *args):
         "connect": connect, "code": verify_code, "password": verify_password,
         "dialogs": dialogs, "contacts": contacts, "search": public_search,
         "saved": saved, "send_group": send_group, "logout": logout,
+        "queue_add": queue_add, "queue_list": queue_list,
+        "queue_send": queue_send, "queue_cancel": queue_cancel,
+        "queue_resolve": queue_resolve, "queue_clear": queue_clear,
         "proxy": configure_proxy
     }
     handler = handlers.get(operation)
@@ -186,6 +295,8 @@ def dispatch(operation, *args):
         return json.dumps(answer("error", "Unknown operation."))
     try:
         result = event_loop().run_until_complete(handler(*args))
+    except ValueError as exc:
+        result = answer("error", str(exc))
     except FloodWaitError as exc:
         result = answer("error", "Telegram rate limit. Wait %s seconds." % exc.seconds)
     except Exception as exc:
