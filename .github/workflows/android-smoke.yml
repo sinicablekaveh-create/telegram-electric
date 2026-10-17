@@ -92,7 +92,7 @@ jobs:
               sleep 2
             done
             adb shell pidof "$app_package" | tr -d '\r' | grep -Eq '[0-9]+'
-            resumed="$(adb shell dumpsys activity activities | tr -d '\r' | grep -F "$app_package/$main_activity" || true)"
+            resumed="$(adb shell dumpsys activity activities | tr -d '\r' | grep -F "$app_package/" | grep -F 'MainActivity' || true)"
             test -n "$resumed"
             if adb logcat -d -s AndroidRuntime:E | grep -F 'FATAL EXCEPTION'; then
               echo 'Android activity crashed during install or upgrade smoke test.'
