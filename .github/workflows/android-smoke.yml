@@ -1,5 +1,12 @@
 name: Android launch smoke test
 on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/android-smoke.yml'
+      - 'build.gradle'
+      - 'settings.gradle'
   workflow_dispatch:
 permissions:
   contents: read
@@ -23,8 +30,17 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build APK
-        run: gradle --no-daemon :app:assembleDebug -PsmokeTest=true
+      - name: Build previous test version
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug -PsmokeTest=true \
+            -PappVersionCode=2 -PappVersionName=0.2.0-proxy
+          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/telegram-direct-v2.apk"
+      - name: Build upgrade test version
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleDebug -PsmokeTest=true \
+            -PappVersionCode=3 -PappVersionName=0.2.1-proxy
       - name: Boot emulator, install and launch APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
@@ -34,10 +50,41 @@ jobs:
           emulator-boot-timeout: 600
           disable-animations: true
           script: |
-            adb install app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -W -n dev.telegram.direct.proxy/dev.telegram.direct.MainActivity
-            sleep 10
-            adb shell pidof dev.telegram.direct.proxy
-            adb shell uiautomator dump /sdcard/telegram-ui.xml
-            adb shell cat /sdcard/telegram-ui.xml | grep 'TELEGRAM DIRECT'
-            adb logcat -d -t 600 | grep -E 'Process: dev.telegram.direct.proxy|FATAL EXCEPTION.*dev.telegram.direct.proxy' && exit 1 || true
+            set -euo pipefail
+            app_package=dev.telegram.direct.proxy
+            main_activity=dev.telegram.direct.MainActivity
+            baseline_apk="$RUNNER_TEMP/telegram-direct-v2.apk"
+            upgrade_apk="$GITHUB_WORKSPACE/app/build/outputs/apk/debug/app-debug.apk"
+            test -s "$baseline_apk"
+            test -s "$upgrade_apk"
+
+            adb install "$baseline_apk"
+            baseline_version="$(adb shell dumpsys package "$app_package" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -n 1 | tr -d '\r')"
+            test "$baseline_version" = "2"
+            adb logcat -c
+            adb shell am start -n "$app_package/$main_activity"
+            for attempt in $(seq 1 30); do
+              if adb shell pidof "$app_package" | tr -d '\r' | grep -Eq '[0-9]+'; then break; fi
+              sleep 2
+            done
+            adb shell pidof "$app_package" | tr -d '\r' | grep -Eq '[0-9]+'
+            adb shell run-as "$app_package" sh -c 'echo upgrade-preserved > files/install-upgrade.marker'
+
+            adb install -r "$upgrade_apk"
+            upgraded_version="$(adb shell dumpsys package "$app_package" | sed -n 's/.*versionCode=\([0-9][0-9]*\).*/\1/p' | head -n 1 | tr -d '\r')"
+            test "$upgraded_version" = "3"
+            marker="$(adb shell run-as "$app_package" cat files/install-upgrade.marker | tr -d '\r')"
+            test "$marker" = "upgrade-preserved"
+
+            adb shell am start -n "$app_package/$main_activity"
+            for attempt in $(seq 1 30); do
+              if adb shell pidof "$app_package" | tr -d '\r' | grep -Eq '[0-9]+'; then break; fi
+              sleep 2
+            done
+            adb shell pidof "$app_package" | tr -d '\r' | grep -Eq '[0-9]+'
+            resumed="$(adb shell dumpsys activity activities | tr -d '\r' | grep -F "$app_package/$main_activity" || true)"
+            test -n "$resumed"
+            if adb logcat -d -s AndroidRuntime:E | grep -F 'FATAL EXCEPTION'; then
+              echo 'Android activity crashed during install or upgrade smoke test.'
+              exit 1
+            fi
