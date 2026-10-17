@@ -4,7 +4,7 @@
         android:name="com.chaquo.python.android.PyApplication"
         android:allowBackup="false"
         android:usesCleartextTraffic="false"
-        android:label="Telegram Direct"
+        android:label="Telegram Direct Proxy"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
