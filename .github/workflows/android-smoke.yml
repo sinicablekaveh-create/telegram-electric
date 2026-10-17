@@ -46,7 +46,7 @@ jobs:
           set -euo pipefail
           gradle --no-daemon :app:assembleDebug -PsmokeTest=true \
             -PappVersionCode=3 -PappVersionName=0.3.0-review
-          cp app/build/outputs/apk/debug/app-debug.apk "$RUNNER_TEMP/telegram-review-v3.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/telegram-review-v3.apk"
       - name: Build review upgrade APK
         run: |
           gradle --no-daemon :app:assembleDebug -PsmokeTest=true \
@@ -54,16 +54,16 @@ jobs:
       - name: Boot emulator, install and upgrade review APK
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 30
           arch: x86_64
           target: google_apis
-          emulator-boot-timeout: 600
+          emulator-boot-timeout: 1200
           disable-animations: true
           script: |
             set -eu
             app_package=dev.telegram.direct.review
             main_activity=dev.telegram.direct.MainActivity
-            baseline_apk="$RUNNER_TEMP/telegram-review-v3.apk"
+            baseline_apk="$GITHUB_WORKSPACE/telegram-review-v3.apk"
             upgrade_apk="$GITHUB_WORKSPACE/app/build/outputs/apk/debug/app-debug.apk"
             test -s "$baseline_apk"
             test -s "$upgrade_apk"
