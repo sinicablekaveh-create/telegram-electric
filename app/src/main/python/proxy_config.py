@@ -22,7 +22,7 @@ def parse_proxy(raw):
 
     host = str(data.get("server", "")).strip()
     port_raw = data.get("port", "")
-    if not host or len(host) > 253 or any(c.isspace() for c in host) or "/" in host or "@" in host:
+    if not host or len(host) > 253 or any(c.isspace() or ord(c) < 32 or c in "/@?#\\\\%" for c in host):
         raise ValueError("Enter a valid proxy server address.")
     if isinstance(port_raw, bool) or not str(port_raw).isdigit():
         raise ValueError("Proxy port must be a number between 1 and 65535.")
