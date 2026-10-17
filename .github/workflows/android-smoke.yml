@@ -60,7 +60,7 @@ jobs:
           emulator-boot-timeout: 600
           disable-animations: true
           script: |
-            set -euo pipefail
+            set -eu
             app_package=dev.telegram.direct.review
             main_activity=dev.telegram.direct.MainActivity
             baseline_apk="$RUNNER_TEMP/telegram-review-v3.apk"
