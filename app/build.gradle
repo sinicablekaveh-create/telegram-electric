@@ -26,6 +26,9 @@ chaquopy {
         } else {
             buildPython 'python3'
         }
-        pip { install 'telethon==1.45.0' }
+        pip {
+            options '--find-links', rootProject.file('vendor').absolutePath
+            install 'telethon==1.45.0'
+        }
     }
 }
