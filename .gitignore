@@ -1,0 +1,16 @@
+/.gradle/
+/build/
+/app/build/
+/.idea/
+*.iml
+*.apk
+*.aab
+*.keystore
+*.jks
+*.session
+*.session-journal
+*.env
+__pycache__/
+*.pyc
+local.properties
+build-debug.log
