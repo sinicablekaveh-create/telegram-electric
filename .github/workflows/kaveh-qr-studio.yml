@@ -17,8 +17,15 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - name: Install SDK 35
-        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: Android SDK 35
+        run: |
+          echo "ANDROID_HOME=$ANDROID_HOME"
+          SDKMGR=$(find "$ANDROID_HOME/cmdline-tools" -name sdkmanager -type f | head -n 1)
+          if [ -n "$SDKMGR" ]; then
+            "$SDKMGR" 'platforms;android-35' 'build-tools;35.0.0'
+          else
+            test -f "$ANDROID_HOME/platforms/android-35/android.jar"
+          fi
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
