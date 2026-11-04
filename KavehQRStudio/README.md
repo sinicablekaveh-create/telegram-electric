@@ -1,33 +1,19 @@
-# Kaveh QR Studio (Android APK)
+# Kaveh QR Studio 2.0 • Android
 
-A lightweight, offline Android application for **Sini Cable Kaveh**.
+برنامه آفلاین سینی کابل کاوه برای قرار دادن QR ثابت روی عکس، بدون وارد کردن فایل QR.
 
-## What it does
-- **Fixed built-in QR** pointing to `https://sinicablekaveh-create.github.io/telegram-electric/kaveh/` (also contains Kaveh's branded QR logo).
-- Choose **only a photo** from Gallery / Files. No need to choose a QR image.
-- QR appears automatically. Drag it with one finger, pinch to resize, or adjust the size slider.
-- Save a high-resolution PNG to **Pictures/KavehQRStudio** (Android 10+).
-- Optional **2x HD** size enhancement with mild unsharp mask (max 6000 px on longer edge); this is *not AI super-resolution*, and cannot recover missing original detail.
-- Offline; no storage permissions, internet permission, ads, analytics, or external libraries.
+## قابلیت‌ها
+- QR ثابت با لوگوی کاوه، لینک مستقیم GitHub Pages چهار پیام‌رسان.
+- انتخاب یک تصویر از گالری؛ QR به طور خودکار روی عکس قرار می‌گیرد.
+- حرکت با لمس، تغییر اندازه با دو انگشت یا نوار تنظیم، انتخاب گوشه‌ها با یک ضربه.
+- اصلاح روشنایی و کنتراست عکس بدون تغییر در پیکسل‌های QR.
+- خروجی با اندازه اصلی عکس (پیش‌فرض)، یا بزرگ‌سازی اختیاری تا 2 برابر با شارپ‌سازی؛ **افزایش واقعی جزئیات با AI نیست**.
+- خروجی پیش‌فرض PNG بدون افت فشرده‌سازی، یا JPG با کیفیت 98 برای حجم کمتر.
+- هشدار پیش از ذخیره برای QRهای کوچک‌تر از 220 پیکسل.
+- ذخیره در Pictures/KavehQRStudio، بدون دسترسی دائمی به فایل‌ها و بدون اینترنت؛ فقط دکمه «آزمایش لینک» مرورگر را باز می‌کند.
 
-## Build
-Use **Android Studio** to open this folder or run with Java 17, Android SDK 35 and Gradle 8.10.2:
+## ساخت APK
+Java 17, Android SDK 35, Gradle 8.10.2; `gradle :app:assembleDebug`. Github Actions: `.github/workflows/kaveh-qr-studio.yml`.
 
-```sh
-gradle --no-daemon :app:assembleDebug
-```
-
-APK: `app/build/outputs/apk/debug/app-debug.apk`
-
-A GitHub Actions workflow (`.github/workflows/kaveh-qr-studio.yml` at repository root) can build and upload the APK.
-
-## Privacy
-Images remain on the phone. The app only needs the user-selected image URI and writes the output to MediaStore (on Android 10+). A built-in QR avoids fetching remote assets. No network permission is requested.
-
-## Version 1.1 verification
-- Embedded QR opens the GitHub Pages URL directly, with no is.gd middle hop.
-- QR image was decoded with both ZBar and OpenCV offline; also after compositing at 256 px onto a factory image.
-- QR pixels are drawn without bilinear interpolation; the 5-module quiet zone remains.
-- The app has a "Test QR link" button that opens the direct URL in the device browser.
-- Photo editing still works offline; the website requires internet access.
-- Since builds are debug-signed with per-run keys, uninstall the previous 1.0 APK before installing 1.1.
+## محدودیت‌ها
+کیفیت نهایی به وضوح عکس اصلی بستگی دارد؛ دوبرابر کردن ابعاد جزئیات جدید نمی‌سازد. هر بار قبل از چاپ انبوه با دوربین واقعی اسکن کنید. APK خروجی debug-signed است، نه Play Store release. نصب روی گوشی واقعی هنوز تست نشده است.

@@ -3,6 +3,7 @@
     <application
         android:allowBackup="false"
         android:label="Kaveh QR Studio"
+        android:icon="@drawable/ic_launcher"
         android:theme="@android:style/Theme.Material.Light.NoActionBar"
         android:usesCleartextTraffic="false"
         android:supportsRtl="true">

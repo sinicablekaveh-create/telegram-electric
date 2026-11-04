@@ -1,6 +1,7 @@
 package com.sinicablekaveh.qrstudio;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.ProgressDialog;
 import android.content.ContentValues;
 import android.content.Intent;
@@ -8,6 +9,8 @@ import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.ColorMatrix;
+import android.graphics.ColorMatrixColorFilter;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
@@ -53,7 +56,11 @@ public class MainActivity extends Activity {
     private Button saveButton;
     private Switch hdSwitch;
     private TextView help;
+    private TextView resolutionText;
+    private TextView qrStatus;
+    private Switch jpgSwitch;
     private String pendingFilename;
+    private boolean pendingJpeg;
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -105,6 +112,7 @@ public class MainActivity extends Activity {
     private void buildUi() {
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setFitsSystemWindows(true);
         scroll.setBackgroundColor(DARK);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -115,14 +123,16 @@ public class MainActivity extends Activity {
         TextView brand = text("KAVEH  •  QR STUDIO", 23, GOLD);
         brand.setTypeface(null, android.graphics.Typeface.BOLD);
         root.addView(brand, lp(-1, -2, 0, 3));
-        root.addView(text("سینی کابل کاوه  |  QR ثابت و آماده", 13, MUTED), lp(-1,-2,0,12));
+        root.addView(text("سینی کابل کاوه  |  QR ثابت و آماده  |  نسخه حرفه‌ای 2.0", 13, MUTED), lp(-1,-2,0,12));
 
         preview = new Preview();
         preview.setBackground(rounded(PANEL, 17));
         root.addView(preview, lp(-1, d(346), 0, 8));
 
         help = text("یک عکس انتخاب کنید؛ QR کاوه خودکار روی آن قرار می‌گیرد.", 13, MUTED);
-        root.addView(help, lp(-1,-2,0,13));
+        root.addView(help, lp(-1,-2,0,4));
+        resolutionText = text("تصویر انتخاب نشده است", 12, MUTED);
+        root.addView(resolutionText, lp(-1,-2,0,10));
 
         Button choose = button("📷  انتخاب عکس از گالری", GOLD, DARK);
         choose.setOnClickListener(v -> openPhoto());
@@ -149,15 +159,37 @@ public class MainActivity extends Activity {
             @Override public void onStartTrackingTouch(SeekBar b) {}
             @Override public void onStopTrackingTouch(SeekBar b) {}
         });
-        root.addView(size, lp(-1, d(43), 0, 10));
+        root.addView(size, lp(-1, d(43), 0, 8));
+
+        TextView presetsLabel = text("جای قرارگیری سریع QR", 14, WHITE);
+        root.addView(presetsLabel, lp(-1, -2, 0, 4));
+        LinearLayout presets = new LinearLayout(this);
+        presets.setOrientation(LinearLayout.HORIZONTAL);
+        addPreset(presets, "بالا راست", 0);
+        addPreset(presets, "بالا چپ", 1);
+        addPreset(presets, "پایین راست", 2);
+        addPreset(presets, "پایین چپ", 3);
+        root.addView(presets, lp(-1, d(44), 0, 14));
+
+        root.addView(text("تنظیم کیفیت و نور تصویر (بدون تأثیر روی کد QR)", 13, WHITE), lp(-1,-2,0,2));
+        addPhotoSlider(root, "روشنایی عکس", 50, true);
+        addPhotoSlider(root, "کنتراست عکس", 50, false);
 
         hdSwitch = new Switch(this);
-        hdSwitch.setText("خروجی HD با بزرگ‌نمایی ۲ برابر و شارپ‌سازی ملایم");
+        hdSwitch.setText("افزایش اندازه خروجی تا ۲ برابر + شارپ‌سازی ملایم (نه AI)");
         hdSwitch.setTextSize(13);
         hdSwitch.setTextColor(WHITE);
-        hdSwitch.setChecked(true);
+        hdSwitch.setChecked(false);
         if (Build.VERSION.SDK_INT >= 21) hdSwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(GOLD));
-        root.addView(hdSwitch, lp(-1,-2,0,10));
+        root.addView(hdSwitch, lp(-1,-2,0,6));
+        jpgSwitch = new Switch(this);
+        jpgSwitch.setText("فایل خروجی JPG کم‌حجم (PNG برای QR و چاپ مطمئن‌تر است)");
+        jpgSwitch.setTextSize(13);
+        jpgSwitch.setTextColor(WHITE);
+        jpgSwitch.setChecked(false);
+        root.addView(jpgSwitch, lp(-1, -2, 0, 8));
+        qrStatus = text("لینک QR ثابت و بدون کوتاه‌کننده است.", 12, GOLD);
+        root.addView(qrStatus, lp(-1,-2,0,8));
         Button linkTest = button("🔗  آزمایش بازشدن لینک QR", PANEL, GOLD);
         linkTest.setOnClickListener(v -> {
             try {
@@ -168,7 +200,42 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(linkTest, lp(-1, d(48), 0, 12));
-        root.addView(text("QR ثابت، مستقیم به صفحه رسمی پیام‌رسان‌های کاوه متصل است.\nبرای جابه‌جایی، QR را روی تصویر لمس و بکشید.\nویرایش عکس آفلاین است؛ بازشدن صفحه QR به اینترنت نیاز دارد.", 12, MUTED), lp(-1,-2,0,0));
+        root.addView(text("QR ثابتِ برند کاوه. عکس را فقط یک‌بار انتخاب کن؛ با لمس جابه‌جا و با دو انگشت اندازه را تغییر بده.\nخروجی پیش‌فرض PNG با اندازه اصلی عکس است. بزرگ‌نمایی پیکسلی، جزئیات از دست رفته عکس را برنمی‌گرداند.\nویرایش و ذخیره آفلاین است؛ بازکردن لینک QR اینترنت می‌خواهد.", 12, MUTED), lp(-1,-2,0,0));
+    }
+
+    private void addPreset(LinearLayout row, String title, int position) {
+        Button b = button(title, Color.rgb(44, 62, 77), WHITE);
+        b.setTextSize(12);
+        LinearLayout.LayoutParams p = new LinearLayout.LayoutParams(0, -1, 1f);
+        p.setMargins(d(2), 0, d(2), 0);
+        row.addView(b, p);
+        b.setOnClickListener(v -> preview.setPreset(position));
+    }
+
+    private void addPhotoSlider(LinearLayout root, String name, int initial, boolean brightness) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(android.view.Gravity.CENTER_VERTICAL);
+        TextView label = text(name, 12, MUTED);
+        row.addView(label, new LinearLayout.LayoutParams(d(108), -2));
+        SeekBar bar = new SeekBar(this);
+        bar.setMax(100);
+        bar.setProgress(initial);
+        if (Build.VERSION.SDK_INT >= 21) {
+            bar.setProgressTintList(android.content.res.ColorStateList.valueOf(GOLD));
+            bar.setThumbTintList(android.content.res.ColorStateList.valueOf(GOLD));
+        }
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onProgressChanged(SeekBar b, int progress, boolean fromUser) {
+                if (brightness) preview.brightness = (progress - 50f) * .8f;
+                else preview.contrast = .80f + progress * .004f;
+                preview.invalidate();
+            }
+            @Override public void onStartTrackingTouch(SeekBar b) {}
+            @Override public void onStopTrackingTouch(SeekBar b) {}
+        });
+        row.addView(bar, new LinearLayout.LayoutParams(0, d(40), 1f));
+        root.addView(row, lp(-1,-2,0,4));
     }
 
     private void openPhoto() {
@@ -195,7 +262,8 @@ public class MainActivity extends Activity {
                         photo = result;
                         preview.setPhoto(result);
                         saveButton.setEnabled(true);
-                        help.setText("QR آماده روی عکس قرار گرفت. در صورت نیاز آن را جابه‌جا کنید.");
+                        help.setText("QR ثابت با لوگوی کاوه روی عکس قرار گرفت. موقعیت را تنظیم کن.");
+                        resolutionText.setText("کیفیت عکس ورودی: " + result.getWidth() + " × " + result.getHeight() + " پیکسل");
                     });
                 } catch (Exception ex) {
                     runOnUiThread(() -> { p.dismiss(); error(ex); });
@@ -207,7 +275,7 @@ public class MainActivity extends Activity {
             ProgressDialog p = progress("در حال ذخیره...");
             worker.execute(() -> {
                 try (OutputStream stream = getContentResolver().openOutputStream(uri)) {
-                    if (stream == null || !output.compress(Bitmap.CompressFormat.PNG, 100, stream)) throw new Exception("ذخیره انجام نشد.");
+                    if (stream == null || !output.compress(pendingJpeg ? Bitmap.CompressFormat.JPEG : Bitmap.CompressFormat.PNG, pendingJpeg ? 98 : 100, stream)) throw new Exception("ذخیره انجام نشد.");
                     stream.flush();
                     runOnUiThread(() -> { p.dismiss(); Toast.makeText(this, "تصویر ذخیره شد ✅", Toast.LENGTH_LONG).show(); });
                 } catch (Exception ex) { runOnUiThread(() -> { p.dismiss(); error(ex); }); }
@@ -266,15 +334,32 @@ public class MainActivity extends Activity {
     private void saveImage() {
         if (photo == null) { Toast.makeText(this, "ابتدا عکس انتخاب کنید.", Toast.LENGTH_SHORT).show(); return; }
         boolean hd = hdSwitch.isChecked();
+        boolean jpeg = jpgSwitch.isChecked();
         final Bitmap chosen = photo;
         float qx = preview.qx, qy = preview.qy, qFraction = preview.qFraction;
-        ProgressDialog p = progress("در حال آماده‌سازی تصویر باکیفیت...");
+        final float brightness = preview.brightness, contrast = preview.contrast;
+        float finalScale = hd ? Math.min(2f, 6000f / Math.max(chosen.getWidth(), chosen.getHeight())) : 1f;
+        final int qrPixels = Math.round(Math.min(chosen.getWidth(), chosen.getHeight()) * qFraction * Math.max(1f, finalScale));
+        if (qrPixels < 220) {
+            new AlertDialog.Builder(this)
+                .setTitle("QR برای اسکن کوچک است")
+                .setMessage("اندازه QR در خروجی حدود " + qrPixels + " پیکسل می‌شود. برای چاپ، QR حدود ۲۵۰ پیکسل یا بیشتر بهتر است. اندازه آن را زیاد کن یا خروجی را ادامه بده.")
+                .setNegativeButton("اصلاح اندازه", (dialog, which) -> {})
+                .setPositiveButton("ادامه ذخیره", (dialog, which) -> doSave(chosen, qr, qx, qy, qFraction, brightness, contrast, hd, jpeg))
+                .show();
+            return;
+        }
+        doSave(chosen, qr, qx, qy, qFraction, brightness, contrast, hd, jpeg);
+    }
+
+    private void doSave(Bitmap chosen, Bitmap qrBitmap, float qx, float qy, float qFraction, float brightness, float contrast, boolean hd, boolean jpeg) {
+        ProgressDialog p = progress("در حال ساخت خروجی باکیفیت...");
         worker.execute(() -> {
             try {
-                Bitmap image = render(chosen, qr, qx, qy, qFraction, hd);
+                Bitmap image = render(chosen, qrBitmap, qx, qy, qFraction, brightness, contrast, hd);
                 runOnUiThread(() -> {
                     p.dismiss();
-                    saveBitmap(image);
+                    saveBitmap(image, jpeg);
                 });
             } catch (OutOfMemoryError oom) {
                 runOnUiThread(() -> { p.dismiss(); Toast.makeText(this, "عکس برای حافظه گوشی بسیار بزرگ است. گزینه HD را خاموش کنید.", Toast.LENGTH_LONG).show(); });
@@ -282,14 +367,15 @@ public class MainActivity extends Activity {
         });
     }
 
-    private static Bitmap render(Bitmap source, Bitmap qr, float qx, float qy, float fraction, boolean hd) {
+    private static Bitmap render(Bitmap source, Bitmap qr, float qx, float qy, float fraction, float brightness, float contrast, boolean hd) {
         int sw = source.getWidth(), sh = source.getHeight();
-        float factor = hd ? Math.min(2f, 6000f / Math.max(sw, sh)) : 1f;
+        float factor = (hd && Math.max(sw, sh) < 6000) ? Math.min(2f, 6000f / Math.max(sw, sh)) : 1f;
         if (factor <= 0f) factor = 1f;
         int w = Math.max(1, Math.round(sw * factor)), h = Math.max(1, Math.round(sh * factor));
         Bitmap result = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
         Canvas canvas = new Canvas(result);
         Paint base = new Paint(Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG | Paint.ANTI_ALIAS_FLAG);
+        base.setColorFilter(photoFilter(brightness, contrast));
         canvas.drawBitmap(source, null, new RectF(0, 0, w, h), base);
         if (hd && factor > 1.01f) enhanceSharpness(result);
         float side = Math.min(w, h) * fraction;
@@ -306,6 +392,17 @@ public class MainActivity extends Activity {
         qrPaint.setAntiAlias(false);
         canvas.drawBitmap(qr, null, qrRect, qrPaint);
         return result;
+    }
+
+    private static ColorMatrixColorFilter photoFilter(float brightness, float contrast) {
+        float t = 128f * (1f - contrast) + brightness;
+        ColorMatrix m = new ColorMatrix(new float[] {
+            contrast, 0f, 0f, 0f, t,
+            0f, contrast, 0f, 0f, t,
+            0f, 0f, contrast, 0f, t,
+            0f, 0f, 0f, 1f, 0f
+        });
+        return new ColorMatrixColorFilter(m);
     }
 
     // Gentle unsharp mask with three scanline buffers, avoiding a huge secondary bitmap.
@@ -336,13 +433,17 @@ public class MainActivity extends Activity {
         return Math.max(0,Math.min(255,c+Math.round((c-blur)*0.30f)));
     }
 
-    private void saveBitmap(Bitmap bitmap) {
-        String file = "Kaveh_QR_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + ".png";
+    private void saveBitmap(Bitmap bitmap, boolean jpeg) {
+        String suffix = jpeg ? ".jpg" : ".png";
+        Bitmap.CompressFormat format = jpeg ? Bitmap.CompressFormat.JPEG : Bitmap.CompressFormat.PNG;
+        String mime = jpeg ? "image/jpeg" : "image/png";
+        String file = "Kaveh_QR_" + new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date()) + suffix;
         if (Build.VERSION.SDK_INT < 29) {
             pendingBitmap = bitmap;
+            pendingJpeg = jpeg;
             Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
             intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType("image/png");
+            intent.setType(mime);
             intent.putExtra(Intent.EXTRA_TITLE, file);
             startActivityForResult(intent, SAVE_DOCUMENT);
             return;
@@ -353,13 +454,13 @@ public class MainActivity extends Activity {
             try {
                 ContentValues values = new ContentValues();
                 values.put(MediaStore.Images.Media.DISPLAY_NAME, file);
-                values.put(MediaStore.Images.Media.MIME_TYPE, "image/png");
+                values.put(MediaStore.Images.Media.MIME_TYPE, mime);
                 values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/KavehQRStudio");
                 values.put(MediaStore.Images.Media.IS_PENDING, 1);
                 resultUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
                 if (resultUri == null) throw new Exception("فضای ذخیره‌سازی در دسترس نیست.");
                 try (OutputStream output = getContentResolver().openOutputStream(resultUri)) {
-                    if (output == null || !bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) throw new Exception("خطا در نوشتن تصویر");
+                    if (output == null || !bitmap.compress(format, jpeg ? 98 : 100, output)) throw new Exception("خطا در نوشتن تصویر");
                     output.flush();
                 }
                 ContentValues done = new ContentValues();
@@ -376,6 +477,7 @@ public class MainActivity extends Activity {
     private class Preview extends View {
         private Bitmap image;
         private float qx = .72f, qy = .74f, qFraction = .36f;
+        private float brightness = 0f, contrast = 1.0f;
         private final RectF photoRect = new RectF();
         private final RectF qrRect = new RectF();
         private boolean dragging;
@@ -393,6 +495,15 @@ public class MainActivity extends Activity {
             ensureBounds(); invalidate();
         }
         void setQrFraction(float f) { qFraction = Math.max(.12f,Math.min(.78f,f)); ensureBounds(); invalidate(); }
+        void setPreset(int preset) {
+            if (image == null) return;
+            float rx = qFraction * Math.min(image.getWidth(), image.getHeight()) / image.getWidth() / 2f;
+            float ry = qFraction * Math.min(image.getWidth(), image.getHeight()) / image.getHeight() / 2f;
+            qx = (preset == 0 || preset == 2) ? 1f - rx - .025f : rx + .025f;
+            qy = (preset == 0 || preset == 1) ? ry + .025f : 1f - ry - .025f;
+            ensureBounds();
+            invalidate();
+        }
         private void ensureBounds() {
             if (image == null) return;
             float halfWidth = qFraction * Math.min(image.getWidth(),image.getHeight()) / image.getWidth() / 2;
@@ -412,6 +523,7 @@ public class MainActivity extends Activity {
             float scale=Math.min((getWidth()-d(10))/(float)image.getWidth(),(getHeight()-d(10))/(float)image.getHeight());
             float width=image.getWidth()*scale,height=image.getHeight()*scale;
             photoRect.set((getWidth()-width)/2,(getHeight()-height)/2,(getWidth()+width)/2,(getHeight()+height)/2);
+            imagePaint.setColorFilter(photoFilter(brightness, contrast));
             c.drawBitmap(image,null,photoRect,imagePaint);
             float side=Math.min(width,height)*qFraction;
             float centerX=photoRect.left+width*qx,centerY=photoRect.top+height*qy;
