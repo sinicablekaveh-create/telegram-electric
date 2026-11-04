@@ -54,6 +54,9 @@ public class MainActivity extends Activity {
     private Bitmap pendingBitmap;
     private Preview preview;
     private Button saveButton;
+    private Button shareButton;
+    private Uri lastSavedUri;
+    private boolean lastSavedJpeg;
     private Switch hdSwitch;
     private TextView help;
     private TextView resolutionText;
@@ -123,7 +126,7 @@ public class MainActivity extends Activity {
         TextView brand = text("KAVEH  •  QR STUDIO", 23, GOLD);
         brand.setTypeface(null, android.graphics.Typeface.BOLD);
         root.addView(brand, lp(-1, -2, 0, 3));
-        root.addView(text("سینی کابل کاوه  |  QR ثابت و آماده  |  نسخه حرفه‌ای 2.0", 13, MUTED), lp(-1,-2,0,12));
+        root.addView(text("سینی کابل کاوه  |  QR ثابت و آماده  |  نسخه ۳.۰ • کنترل کیفیت اسکن", 13, MUTED), lp(-1,-2,0,12));
 
         preview = new Preview();
         preview.setBackground(rounded(PANEL, 17));
@@ -142,6 +145,12 @@ public class MainActivity extends Activity {
         saveButton.setEnabled(false);
         saveButton.setOnClickListener(v -> saveImage());
         root.addView(saveButton, lp(-1, d(53), 0, 13));
+
+        shareButton = button("↗  اشتراک‌گذاری آخرین خروجی", PANEL, GOLD);
+        shareButton.setEnabled(false);
+        shareButton.setOnClickListener(v -> shareSavedImage());
+        root.addView(shareButton, lp(-1,d(46),0,12));
+
 
         TextView sizeLabel = text("اندازه QR در عکس", 14, WHITE);
         root.addView(sizeLabel, lp(-1,-2,0,0));
@@ -171,6 +180,19 @@ public class MainActivity extends Activity {
         addPreset(presets, "پایین چپ", 3);
         root.addView(presets, lp(-1, d(44), 0, 14));
 
+        LinearLayout quickTools = new LinearLayout(this);
+        quickTools.setOrientation(LinearLayout.HORIZONTAL);
+        Button center = button("◎  وسط تصویر", Color.rgb(44, 62, 77), WHITE);
+        Button reset = button("↺  بازنشانی QR", Color.rgb(44, 62, 77), WHITE);
+        LinearLayout.LayoutParams quick = new LinearLayout.LayoutParams(0, -1, 1f);
+        quick.setMargins(d(2),0,d(2),0);
+        quickTools.addView(center, new LinearLayout.LayoutParams(0, -1, 1f));
+        quickTools.addView(reset, new LinearLayout.LayoutParams(0, -1, 1f));
+        center.setOnClickListener(v -> preview.setCenter());
+        reset.setOnClickListener(v -> { size.setProgress(22); preview.resetQr(); });
+        root.addView(quickTools, lp(-1,d(43),0,14));
+
+
         root.addView(text("تنظیم کیفیت و نور تصویر (بدون تأثیر روی کد QR)", 13, WHITE), lp(-1,-2,0,2));
         addPhotoSlider(root, "روشنایی عکس", 50, true);
         addPhotoSlider(root, "کنتراست عکس", 50, false);
@@ -188,7 +210,7 @@ public class MainActivity extends Activity {
         jpgSwitch.setTextColor(WHITE);
         jpgSwitch.setChecked(false);
         root.addView(jpgSwitch, lp(-1, -2, 0, 8));
-        qrStatus = text("لینک QR ثابت و بدون کوتاه‌کننده است.", 12, GOLD);
+        qrStatus = text("QR ثابت است؛ کد روی خروجی قبل از ذخیره بررسی می‌شود.", 12, GOLD);
         root.addView(qrStatus, lp(-1,-2,0,8));
         Button linkTest = button("🔗  آزمایش بازشدن لینک QR", PANEL, GOLD);
         linkTest.setOnClickListener(v -> {
@@ -200,7 +222,7 @@ public class MainActivity extends Activity {
             }
         });
         root.addView(linkTest, lp(-1, d(48), 0, 12));
-        root.addView(text("QR ثابتِ برند کاوه. عکس را فقط یک‌بار انتخاب کن؛ با لمس جابه‌جا و با دو انگشت اندازه را تغییر بده.\nخروجی پیش‌فرض PNG با اندازه اصلی عکس است. بزرگ‌نمایی پیکسلی، جزئیات از دست رفته عکس را برنمی‌گرداند.\nویرایش و ذخیره آفلاین است؛ بازکردن لینک QR اینترنت می‌خواهد.", 12, MUTED), lp(-1,-2,0,0));
+        root.addView(text("QR ثابتِ برند کاوه. عکس را انتخاب کن؛ QR خودکار اضافه می‌شود، با لمس جابه‌جا و با دو انگشت تنظیم می‌شود. پیش از ذخیره، خروجی آفلاین اسکن می‌شود.\nخروجی پیش‌فرض PNG با اندازه اصلی عکس است. بزرگ‌نمایی پیکسلی، جزئیات از دست رفته عکس را برنمی‌گرداند.\nویرایش و ذخیره آفلاین است؛ بازکردن لینک QR اینترنت می‌خواهد.", 12, MUTED), lp(-1,-2,0,0));
     }
 
     private void addPreset(LinearLayout row, String title, int position) {
@@ -236,6 +258,17 @@ public class MainActivity extends Activity {
         });
         row.addView(bar, new LinearLayout.LayoutParams(0, d(40), 1f));
         root.addView(row, lp(-1,-2,0,4));
+    }
+
+    private void shareSavedImage() {
+        if (lastSavedUri == null) { Toast.makeText(this, "هنوز خروجی ذخیره نشده است.", Toast.LENGTH_SHORT).show(); return; }
+        try {
+            Intent i = new Intent(Intent.ACTION_SEND);
+            i.setType(lastSavedJpeg ? "image/jpeg" : "image/png");
+            i.putExtra(Intent.EXTRA_STREAM, lastSavedUri);
+            i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            startActivity(Intent.createChooser(i, "اشتراک‌گذاری عکس QR کاوه"));
+        } catch (Exception e) { error(e); }
     }
 
     private void openPhoto() {
@@ -277,7 +310,14 @@ public class MainActivity extends Activity {
                 try (OutputStream stream = getContentResolver().openOutputStream(uri)) {
                     if (stream == null || !output.compress(pendingJpeg ? Bitmap.CompressFormat.JPEG : Bitmap.CompressFormat.PNG, pendingJpeg ? 98 : 100, stream)) throw new Exception("ذخیره انجام نشد.");
                     stream.flush();
-                    runOnUiThread(() -> { p.dismiss(); Toast.makeText(this, "تصویر ذخیره شد ✅", Toast.LENGTH_LONG).show(); });
+                    final Uri savedUri = uri;
+                    runOnUiThread(() -> {
+                        lastSavedUri = savedUri;
+                        lastSavedJpeg = pendingJpeg;
+                        shareButton.setEnabled(true);
+                        p.dismiss();
+                        Toast.makeText(this, "تصویر ذخیره شد ✅", Toast.LENGTH_LONG).show();
+                    });
                 } catch (Exception ex) { runOnUiThread(() -> { p.dismiss(); error(ex); }); }
                 finally { output.recycle(); }
             });
@@ -340,10 +380,10 @@ public class MainActivity extends Activity {
         final float brightness = preview.brightness, contrast = preview.contrast;
         float finalScale = hd ? Math.min(2f, 6000f / Math.max(chosen.getWidth(), chosen.getHeight())) : 1f;
         final int qrPixels = Math.round(Math.min(chosen.getWidth(), chosen.getHeight()) * qFraction * Math.max(1f, finalScale));
-        if (qrPixels < 220) {
+        if (qrPixels < 280) {
             new AlertDialog.Builder(this)
                 .setTitle("QR برای اسکن کوچک است")
-                .setMessage("اندازه QR در خروجی حدود " + qrPixels + " پیکسل می‌شود. برای چاپ، QR حدود ۲۵۰ پیکسل یا بیشتر بهتر است. اندازه آن را زیاد کن یا خروجی را ادامه بده.")
+                .setMessage("اندازه QR در خروجی حدود " + qrPixels + " پیکسل می‌شود. برای چاپ، QR دست‌کم ۲۸۰ پیکسل یا بیشتر بهتر است. اندازه آن را زیاد کن یا خروجی را ادامه بده.")
                 .setNegativeButton("اصلاح اندازه", (dialog, which) -> {})
                 .setPositiveButton("ادامه ذخیره", (dialog, which) -> doSave(chosen, qr, qx, qy, qFraction, brightness, contrast, hd, jpeg))
                 .show();
@@ -357,9 +397,22 @@ public class MainActivity extends Activity {
         worker.execute(() -> {
             try {
                 Bitmap image = render(chosen, qrBitmap, qx, qy, qFraction, brightness, contrast, hd);
+                boolean qrReadable = QrVerifier.verify(image, qx, qy, qFraction, FixedQr.DESTINATION);
                 runOnUiThread(() -> {
                     p.dismiss();
-                    saveBitmap(image, jpeg);
+                    if (qrReadable) {
+                        qrStatus.setText("✓ کد QR در خروجی با اسکن آفلاین تأیید شد");
+                        saveBitmap(image, jpeg);
+                    } else {
+                        qrStatus.setText("⚠ اسکن خودکار نتیجه نداد؛ QR را بزرگ‌تر کنید");
+                        new AlertDialog.Builder(this)
+                            .setTitle("بررسی کیفیت QR")
+                            .setMessage("برنامه نتوانست QR روی خروجی را بخواند. بهتر است اندازه QR را بیشتر کنی یا JPG را خاموش کنی. برای چاپ انبوه، با دوربین گوشی هم تست کن.")
+                            .setNegativeButton("اصلاح اندازه", (dialog, which) -> image.recycle())
+                            .setPositiveButton("ذخیره با هشدار", (dialog, which) -> saveBitmap(image, jpeg))
+                            .setOnCancelListener(dialog -> image.recycle())
+                            .show();
+                    }
                 });
             } catch (OutOfMemoryError oom) {
                 runOnUiThread(() -> { p.dismiss(); Toast.makeText(this, "عکس برای حافظه گوشی بسیار بزرگ است. گزینه HD را خاموش کنید.", Toast.LENGTH_LONG).show(); });
@@ -466,7 +519,14 @@ public class MainActivity extends Activity {
                 ContentValues done = new ContentValues();
                 done.put(MediaStore.Images.Media.IS_PENDING, 0);
                 getContentResolver().update(resultUri, done, null, null);
-                runOnUiThread(() -> { dialog.dismiss(); Toast.makeText(this, "ذخیره شد ✅  Pictures/KavehQRStudio", Toast.LENGTH_LONG).show(); });
+                final Uri savedUri = resultUri;
+                runOnUiThread(() -> {
+                    lastSavedUri = savedUri;
+                    lastSavedJpeg = jpeg;
+                    shareButton.setEnabled(true);
+                    dialog.dismiss();
+                    Toast.makeText(this, "ذخیره شد ✅  Pictures/KavehQRStudio", Toast.LENGTH_LONG).show();
+                });
             } catch (Exception ex) {
                 if (resultUri != null) getContentResolver().delete(resultUri, null, null);
                 runOnUiThread(() -> { dialog.dismiss(); error(ex); });
@@ -495,6 +555,8 @@ public class MainActivity extends Activity {
             ensureBounds(); invalidate();
         }
         void setQrFraction(float f) { qFraction = Math.max(.12f,Math.min(.78f,f)); ensureBounds(); invalidate(); }
+        void setCenter() { if(image==null) return; qx=.5f; qy=.5f; ensureBounds(); invalidate(); }
+        void resetQr() { if(image==null) return; qFraction=.36f; qx=image.getWidth()>image.getHeight() ? .76f : .5f; qy=image.getWidth()>image.getHeight() ? .72f : .78f; ensureBounds(); invalidate(); }
         void setPreset(int preset) {
             if (image == null) return;
             float rx = qFraction * Math.min(image.getWidth(), image.getHeight()) / image.getWidth() / 2f;
