@@ -137,7 +137,7 @@ public class MainActivity extends Activity {
         root.addView(sizeLabel, lp(-1,-2,0,0));
         SeekBar size = new SeekBar(this);
         size.setMax(65);
-        size.setProgress(18);
+        size.setProgress(22);
         if (Build.VERSION.SDK_INT >= 21) {
             size.setProgressTintList(android.content.res.ColorStateList.valueOf(GOLD));
             size.setThumbTintList(android.content.res.ColorStateList.valueOf(GOLD));
@@ -158,7 +158,17 @@ public class MainActivity extends Activity {
         hdSwitch.setChecked(true);
         if (Build.VERSION.SDK_INT >= 21) hdSwitch.setThumbTintList(android.content.res.ColorStateList.valueOf(GOLD));
         root.addView(hdSwitch, lp(-1,-2,0,10));
-        root.addView(text("QR ثابت است: https://is.gd/KavehChannels\nبرای جابه‌جایی، QR را روی تصویر لمس و بکشید.\nبدون اینترنت و بدون نیاز به انتخاب فایل QR.", 12, MUTED), lp(-1,-2,0,0));
+        Button linkTest = button("🔗  آزمایش بازشدن لینک QR", PANEL, GOLD);
+        linkTest.setOnClickListener(v -> {
+            try {
+                Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(FixedQr.DESTINATION));
+                startActivity(browser);
+            } catch (Exception e) {
+                Toast.makeText(this, "مرورگری برای باز کردن لینک پیدا نشد.", Toast.LENGTH_LONG).show();
+            }
+        });
+        root.addView(linkTest, lp(-1, d(48), 0, 12));
+        root.addView(text("QR ثابت، مستقیم به صفحه رسمی پیام‌رسان‌های کاوه متصل است.\nبرای جابه‌جایی، QR را روی تصویر لمس و بکشید.\nویرایش عکس آفلاین است؛ بازشدن صفحه QR به اینترنت نیاز دارد.", 12, MUTED), lp(-1,-2,0,0));
     }
 
     private void openPhoto() {
@@ -291,7 +301,10 @@ public class MainActivity extends Activity {
         bg.setColor(Color.WHITE);
         float pad = Math.max(2, side * .018f);
         canvas.drawRoundRect(new RectF(qrRect.left - pad, qrRect.top - pad, qrRect.right + pad, qrRect.bottom + pad), pad * 2, pad * 2, bg);
-        canvas.drawBitmap(qr, null, qrRect, base);
+        Paint qrPaint = new Paint(); // nearest-neighbor rendering preserves exact QR modules
+        qrPaint.setFilterBitmap(false);
+        qrPaint.setAntiAlias(false);
+        canvas.drawBitmap(qr, null, qrRect, qrPaint);
         return result;
     }
 
@@ -362,12 +375,13 @@ public class MainActivity extends Activity {
 
     private class Preview extends View {
         private Bitmap image;
-        private float qx = .72f, qy = .74f, qFraction = .32f;
+        private float qx = .72f, qy = .74f, qFraction = .36f;
         private final RectF photoRect = new RectF();
         private final RectF qrRect = new RectF();
         private boolean dragging;
         private float offX, offY, pinchDist, pinchSize;
         private final Paint imagePaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG | Paint.DITHER_FLAG);
+        private final Paint qrPaint = new Paint();
         private final Paint whitePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint outlinePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -404,7 +418,9 @@ public class MainActivity extends Activity {
             qrRect.set(centerX-side/2,centerY-side/2,centerX+side/2,centerY+side/2);
             float pad=d(3);
             c.drawRoundRect(new RectF(qrRect.left-pad,qrRect.top-pad,qrRect.right+pad,qrRect.bottom+pad),d(4),d(4),whitePaint);
-            c.drawBitmap(qr,null,qrRect,imagePaint);
+            qrPaint.setFilterBitmap(false);
+            qrPaint.setAntiAlias(false);
+            c.drawBitmap(qr,null,qrRect,qrPaint);
             c.drawRoundRect(qrRect,d(3),d(3),outlinePaint);
         }
         private void move(float x,float y) {
