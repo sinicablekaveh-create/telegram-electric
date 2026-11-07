@@ -39,7 +39,9 @@ public class MainActivity extends Activity {
         heading(root, "CONNECTION & PROXY");
         proxyInfo = label(root, ProxySettings.summary(this));
         button(root, "PROXY SETTINGS (SOCKS5 / MTProto)",
-            () -> ProxySettings.show(this, config -> task("proxy", config)));
+            () -> ProxySettings.show(this,
+                config -> task("proxy", config),
+                config -> task("proxy_test", value(id), value(hash), config)));
         id = field(root, "API ID", InputType.TYPE_CLASS_NUMBER);
         hash = field(root, "API Hash", InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
         phone = field(root, "Phone (+country code)", InputType.TYPE_CLASS_PHONE);

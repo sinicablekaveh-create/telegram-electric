@@ -3,6 +3,7 @@ import asyncio
 import json
 from pathlib import Path
 from telethon import TelegramClient, connection
+from telethon.sessions import MemorySession
 from proxy_config import parse_proxy, telethon_options, proxy_label
 from telethon.errors import FloodWaitError, SessionPasswordNeededError
 from telethon.tl.functions.contacts import SearchRequest, GetContactsRequest
@@ -67,6 +68,29 @@ async def configure_proxy(settings_json):
     _client = candidate
     _proxy_settings = settings
     return answer("proxy_applied", "Telegram connected: " + proxy_label(settings))
+
+
+async def test_proxy_connection(api_id, api_hash, settings_json):
+    """Test proxy transport against Telegram without a phone number or login code.
+
+    Uses an ephemeral MTProto session and never changes the active account.
+    """
+    config = parse_proxy(settings_json)
+    if config["type"] == "direct":
+        return answer("error", "Select SOCKS5 or MTProto before testing.")
+    if not api_id.isdigit() or len(api_hash) != 32:
+        return answer("error", "Enter your Telegram API ID and API Hash first.")
+    opts = telethon_options(config, connection.ConnectionTcpMTProxyRandomizedIntermediate)
+    probe = TelegramClient(
+        MemorySession(), int(api_id), api_hash,
+        receive_updates=False, auto_reconnect=False,
+        connection_retries=0, request_retries=0, timeout=9,
+        flood_sleep_threshold=0, **opts)
+    try:
+        await asyncio.wait_for(probe.connect(), timeout=16)
+        return answer("proxy_test_ok", "Proxy reached Telegram. No login or messages were sent.")
+    finally:
+        await probe.disconnect()
 
 
 async def connect(storage, api_id, api_hash, phone, proxy_json='{"type":"direct"}'):
@@ -179,7 +203,7 @@ def dispatch(operation, *args):
         "connect": connect, "code": verify_code, "password": verify_password,
         "dialogs": dialogs, "contacts": contacts, "search": public_search,
         "saved": saved, "send_group": send_group, "logout": logout,
-        "proxy": configure_proxy
+        "proxy": configure_proxy, "proxy_test": test_proxy_connection
     }
     handler = handlers.get(operation)
     if handler is None:

@@ -6,7 +6,9 @@ Version 0.2.0-proxy uses the separate package `dev.telegram.direct.proxy` so the
 Features:
 - Telegram login using your own API ID, API Hash, phone verification code and optional 2-step password.
 - Proxy settings: Off/Direct, SOCKS5 (optional username/password), MTProto (secret), and importing `tg://proxy`, `tg://socks`, or corresponding `https://t.me/...` links.
-- Tap **PROXY SETTINGS** then **APPLY & CONNECT**. If signed in, the Telegram client reconnects with the chosen proxy; otherwise the settings are used on the next **CONNECT**. A failed proxy connection does not overwrite the saved settings.
+- Tap **PROXY SETTINGS**. Use **TEST CONNECTION** to verify SOCKS5 or MTProto against Telegram without requesting a login code, changing the active session or sending a message. Enter API ID and API Hash on the main screen first.
+- Tap **APPLY** to use the settings. If already connected, the Telegram client reconnects using the proxy; otherwise settings are used on the next **CONNECT**. A failed proxy connection does not overwrite the saved settings.
+- Proxy testing requires an actual working proxy server. An offline or invalid proxy may return an error; no direct-connection fallback is attempted.
 - Proxy settings including credentials are encrypted locally using Android Keystore; no credentials are sent to GitHub. This config applies to this Telegram app only, not system-wide traffic.
 - List conversations, joined groups, contacts and search public Telegram.
 - Send a test message to your own Saved Messages.
