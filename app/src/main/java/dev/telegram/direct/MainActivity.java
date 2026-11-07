@@ -21,7 +21,7 @@ public class MainActivity extends Activity {
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private EditText id, hash, phone, code, password, query, message;
     private TextView status, selected, proxyInfo;
-    private LinearLayout results;
+    private LinearLayout results, queueResults;
     private String targetId = "", targetName = "";
     private boolean busy = false;
 
@@ -52,10 +52,11 @@ public class MainActivity extends Activity {
         button(root, "VERIFY PASSWORD", () -> task("password", value(password)));
         status = label(root, "Not connected.");
         heading(root, "SEARCH & CONVERSATIONS");
-        query = field(root, "Search public Telegram", InputType.TYPE_CLASS_TEXT);
-        button(root, "SEARCH PUBLIC", () -> task("search", value(query)));
-        button(root, "MY GROUPS & CHATS", () -> task("dialogs"));
-        button(root, "MY CONTACTS", () -> task("contacts"));
+        query = field(root, "Search public groups, channels and users", InputType.TYPE_CLASS_TEXT);
+        button(root, "SEARCH PUBLIC TELEGRAM", () -> task("search", value(query)));
+        EditText localSearch = field(root, "Filter joined groups or contacts", InputType.TYPE_CLASS_TEXT);
+        button(root, "FIND MY JOINED GROUPS", () -> task("dialogs", value(localSearch)));
+        button(root, "FIND MY TELEGRAM CONTACTS", () -> task("contacts", value(localSearch)));
         results = new LinearLayout(this);
         results.setOrientation(LinearLayout.VERTICAL);
         root.addView(results);
@@ -65,6 +66,14 @@ public class MainActivity extends Activity {
         selected = label(root, "No group selected.");
         button(root, "TEST: SEND TO SAVED MESSAGES", this::confirmSaved);
         button(root, "REVIEW & SEND TO SELECTED GROUP", this::confirmGroup);
+        heading(root, "MANUAL REVIEW QUEUE");
+        label(root, "Nothing is sent from the queue without reviewing and confirming one entry.");
+        button(root, "ADD SELECTED GROUP MESSAGE TO QUEUE", this::confirmQueueAdd);
+        button(root, "REFRESH REVIEW QUEUE", () -> task("queue_list"));
+        button(root, "CLEAR SENT / CANCELLED ENTRIES", this::confirmQueueClear);
+        queueResults = new LinearLayout(this);
+        queueResults.setOrientation(LinearLayout.VERTICAL);
+        root.addView(queueResults);
         button(root, "LOG OUT", () -> new AlertDialog.Builder(this)
             .setTitle("Log out of this app?")
             .setNegativeButton("Cancel", null)
@@ -116,6 +125,75 @@ public class MainActivity extends Activity {
             .show();
     }
 
+    private void confirmQueueAdd() {
+        String text = value(message);
+        if (targetId.isEmpty() || text.isEmpty()) {
+            status.setText("Select a joined group and enter a message.");
+            return;
+        }
+        String groupId = targetId;
+        new AlertDialog.Builder(this)
+            .setTitle("Add one message to review queue?")
+            .setMessage("Group: " + targetName + "\n\nText:\n" + text
+                        + "\n\nAdding does NOT send.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Add to queue", (d,w) -> task("queue_add", groupId, text))
+            .show();
+    }
+
+    private void confirmQueueClear() {
+        new AlertDialog.Builder(this)
+            .setTitle("Clear finished entries?")
+            .setMessage("Only sent and cancelled entries are removed. Pending and uncertain entries remain.")
+            .setNegativeButton("Cancel", null)
+            .setPositiveButton("Clear", (d,w) -> task("queue_clear"))
+            .show();
+    }
+
+    private void renderQueue(JSONArray items) {
+        queueResults.removeAllViews();
+        label(queueResults, "Queue entries: " + items.length());
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item == null) continue;
+            String state = item.optString("state");
+            String name = item.optString("group");
+            String text = item.optString("text");
+            String entryId = item.optString("id");
+            String preview = text.length() > 140 ? text.substring(0, 140) + "..." : text;
+            label(queueResults, "[" + state + "] " + name + "\n" + preview);
+            if ("pending".equals(state)) {
+                button(queueResults, "REVIEW / SEND ONE: " + name, () ->
+                    new AlertDialog.Builder(this)
+                        .setTitle("Confirm one queue delivery")
+                        .setMessage("Joined group: " + name + "\n\nMessage:\n" + text
+                          + "\n\nOnly this one entry will be attempted.")
+                        .setNegativeButton("Keep pending", null)
+                        .setPositiveButton("Send one", (d,w) -> task("queue_send", entryId))
+                        .show());
+                button(queueResults, "CANCEL PENDING: " + name, () ->
+                    new AlertDialog.Builder(this)
+                        .setTitle("Cancel pending entry?")
+                        .setMessage("No message will be sent.")
+                        .setNegativeButton("Keep", null)
+                        .setPositiveButton("Cancel entry", (d,w) -> task("queue_cancel", entryId))
+                        .show());
+            } else if ("uncertain".equals(state)) {
+                button(queueResults, "RESOLVE UNKNOWN DELIVERY: " + name, () ->
+                    new AlertDialog.Builder(this)
+                        .setTitle("Check Telegram group first")
+                        .setMessage("A send was attempted but delivery is unknown. Check this group manually. "
+                          + "This action never retries or sends a message.")
+                        .setNegativeButton("Keep uncertain", null)
+                        .setNeutralButton("Mark not delivered / cancel",
+                            (d,w) -> task("queue_resolve", entryId, "cancelled"))
+                        .setPositiveButton("Mark delivered",
+                            (d,w) -> task("queue_resolve", entryId, "sent"))
+                        .show());
+            }
+        }
+    }
+
     private void task(String command, String... args) {
         if (busy) { status.setText("Another operation is running."); return; }
         busy = true;
@@ -150,19 +228,24 @@ public class MainActivity extends Activity {
                     }
                 }
                 JSONArray items = result.optJSONArray("items");
-                if(items != null) render(items);
+                if(items != null) {
+                    if ("queue_list".equals(command)) renderQueue(items);
+                    else render(items);
+                }
                 if("authorized".equals(type)) { code.setText(""); password.setText(""); }
                 if("logged_out".equals(type)) {
                     targetId = ""; targetName = ""; selected.setText("No group selected.");
                     results.removeAllViews();
+                    queueResults.removeAllViews();
                 }
                 if("sent".equals(type) && "send_group".equals(command)) {
                     targetId = ""; targetName = ""; selected.setText("No group selected.");
                 }
-                if("error".equals(type) && "send_group".equals(command)) {
+                if(("error".equals(type) && "send_group".equals(command)) ||
+                    ("uncertain".equals(type) && "queue_send".equals(command))) {
                     new AlertDialog.Builder(this)
                         .setTitle("Check Telegram before retrying")
-                        .setMessage("The send result may be uncertain. Check the group for a duplicate first.")
+                        .setMessage("A send may have succeeded. Check Telegram before retrying to avoid duplicates.")
                         .setPositiveButton("OK",null).show();
                 }
             });
